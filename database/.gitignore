@@ -1,0 +1,13 @@
+*.sqlite*
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Storage
+/storage/
+/bootstrap/cache/
