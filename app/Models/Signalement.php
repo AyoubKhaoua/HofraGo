@@ -16,6 +16,7 @@ class Signalement extends Model
         'description',
         'statut',
         'date_signalement',
+        'localisation',
         'category_id',
         'citoyen_id',
         'agent_municipal_id',
