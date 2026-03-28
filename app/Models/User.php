@@ -50,4 +50,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(\App\Models\Signalement::class, 'citoyen_id');
     }
+
+    public function hasRole(string $role): bool
+    {
+        return $this->role?->name === $role;
+    }
+
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role?->name, $roles, true);
+    }
 }
