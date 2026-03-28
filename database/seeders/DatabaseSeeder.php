@@ -2,6 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\AgentMunicipal;
+use App\Models\Category;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -15,11 +18,38 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $adminRole = Role::query()->firstOrCreate(['name' => 'admin']);
+        $citoyenRole = Role::query()->firstOrCreate(['name' => 'citoyen']);
+        $agentRole = Role::query()->firstOrCreate(['name' => 'agent_municipal']);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        User::query()->updateOrCreate([
+            'email' => 'admin@example.com',
+        ], [
+            'name' => 'Admin User',
+            'password' => 'password',
+            'role_id' => $adminRole->id,
         ]);
+
+        User::query()->updateOrCreate([
+            'email' => 'citoyen@example.com',
+        ], [
+            'name' => 'Citoyen User',
+            'password' => 'password',
+            'role_id' => $citoyenRole->id,
+        ]);
+
+        $agentUser = User::query()->updateOrCreate([
+            'email' => 'agent@example.com',
+        ], [
+            'name' => 'Agent User',
+            'password' => 'password',
+            'role_id' => $agentRole->id,
+        ]);
+
+
+
+        foreach (['Voirie', 'Eclairage', 'Proprete', 'Espaces verts'] as $title) {
+            Category::query()->firstOrCreate(['title' => $title]);
+        }
     }
 }
