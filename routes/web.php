@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return Auth::check() ? redirect()->route('dashboard') : redirect()->route('login.form');
+    return view('welcome');
 })->name('home');
 
 Route::middleware('guest')->group(function (): void {
@@ -21,6 +21,11 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    Route::middleware('role:admin,agent_municipal')->group(function (): void {
+        Route::post('/signalements/{signalement}/status', [SignalementController::class, 'updateStatus'])
+            ->name('signalements.status.update');
+    });
 
 
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\HistoriqueStatut;
 use App\Models\Photo;
 use App\Models\Signalement;
 use Illuminate\Http\RedirectResponse;
@@ -13,35 +14,51 @@ class SignalementController extends Controller
 {
     public function index(Request $request): View
     {
-        $user = $request->user()->load('role', 'agentMunicipal');
+        $user = $request->user();
 
-        $query = Signalement::query()
-            ->with(['category', 'citoyen', 'agentMunicipal.user'])
-            ->latest();
+        $query = Signalement::query()->latest();
 
-        if ($user->hasRole('citoyen')) {
+        if ($user->role?->name === 'citoyen') {
             $query->where('citoyen_id', $user->id);
         }
 
-        if ($user->hasRole('agent_municipal')) {
+        if ($user->role?->name === 'agent_municipal') {
             $agentId = $user->agentMunicipal?->id;
             $query->where('agent_municipal_id', $agentId ?? 0);
         }
 
-        return view('signalements.index', [
-            'signalements' => $query->paginate(10),
-            'user' => $user,
-        ]);
+        $signalements = $query->paginate(10);
+
+        return view('signalements.index', compact('signalements', 'user'));
     }
 
     public function show(Request $request, Signalement $signalement): View
     {
-        $signalement->load(['category', 'citoyen', 'agentMunicipal.user']);
-        $this->authorizeView($request->user(), $signalement);
+        $user = $request->user();
 
-        return view('signalements.show', [
-            'signalement' => $signalement,
-        ]);
+        /*  if ($user->role->name === 'citoyen' && $signalement->citoyen_id !== $user->id) {
+            abort(403, 'Access denied.');
+        }
+ */
+        if (
+            $user->role?->name === 'agent_municipal' &&
+            $signalement->agent_municipal_id !== ($user->agentMunicipal?->id)
+        ) {
+            abort(403, 'Access denied.');
+        }
+
+        $canUpdateStatus = in_array($user->role->name, ['admin', 'agent_municipal'], true);
+
+        $nextStatuses = [];
+        if ($signalement->statut === 'en_attente') {
+            $nextStatuses = ['en_cours', 'rejete'];
+        } elseif ($signalement->statut === 'en_cours') {
+            $nextStatuses = ['resolu', 'rejete'];
+        }
+
+        $historiqueStatuts = $signalement->historiqueStatuts()->orderByDesc('id')->get();
+
+        return view('signalements.show', compact('signalement', 'canUpdateStatus', 'nextStatuses', 'historiqueStatuts'));
     }
 
     public function create(): View
@@ -71,6 +88,14 @@ class SignalementController extends Controller
             'date_signalement' => now()->toDateString(),
         ]);
 
+        HistoriqueStatut::query()->create([
+            'titre' => 'Creation du signalement',
+            'ancien_statut' => '-',
+            'nouveau_statut' => 'en_attente',
+            'date_changement' => now()->toDateString(),
+            'signalement_id' => $signalement->id,
+        ]);
+
         if ($request->hasFile('images') && is_array($request->file('images'))) {
             foreach ($request->file('images') as $image) {
                 $path = $image->storePublicly('signalements', 'public');
@@ -87,17 +112,20 @@ class SignalementController extends Controller
 
     public function edit(Request $request, Signalement $signalement): View
     {
-        $this->authorizeCitizenOwner($request->user()->id, $signalement);
+        if ($signalement->citoyen_id !== $request->user()->id) {
+            abort(403, 'Access denied.');
+        }
 
-        return view('signalements.edit', [
-            'signalement' => $signalement,
-            'categories' => Category::query()->orderBy('title')->get(),
-        ]);
+        $categories = Category::query()->orderBy('title')->get();
+
+        return view('signalements.edit', compact('signalement', 'categories'));
     }
 
     public function update(Request $request, Signalement $signalement): RedirectResponse
     {
-        $this->authorizeCitizenOwner($request->user()->id, $signalement);
+        if ($signalement->citoyen_id !== $request->user()->id) {
+            abort(403, 'Access denied.');
+        }
 
         $data = $request->validate([
             'titre' => ['required', 'string', 'max:255'],
@@ -113,32 +141,62 @@ class SignalementController extends Controller
 
     public function destroy(Request $request, Signalement $signalement): RedirectResponse
     {
-        $this->authorizeCitizenOwner($request->user()->id, $signalement);
+        if ($signalement->citoyen_id !== $request->user()->id) {
+            abort(403, 'Access denied.');
+        }
 
         $signalement->delete();
 
         return redirect()->route('signalements.index')->with('success', 'Signalement deleted successfully.');
     }
 
-    private function authorizeView($user, Signalement $signalement): void
+    public function updateStatus(Request $request, Signalement $signalement): RedirectResponse
     {
-        if ($user->hasRole('admin')) {
-            return;
+        $user = $request->user();
+
+        if (! in_array($user->role->name, ['admin', 'agent_municipal'], true)) {
+            abort(403, 'Access denied.');
         }
 
-        if ($user->hasRole('citoyen') && $signalement->citoyen_id === $user->id) {
-            return;
+        if (
+            $user->role?->name === 'agent_municipal' &&
+            $signalement->agent_municipal_id !== ($user->agentMunicipal?->id)
+        ) {
+            abort(403, 'Access denied.');
         }
 
-        if ($user->hasRole('agent_municipal') && $signalement->agent_municipal_id === $user->agentMunicipal?->id) {
-            return;
+        $data = $request->validate([
+            'statut' => ['required', 'in:en_attente,en_cours,resolu,rejete'],
+        ]);
+
+        $ancienStatut = $signalement->statut;
+        $nouveauStatut = $data['statut'];
+
+        $allowedTransitions = [
+            'en_attente' => ['en_cours', 'rejete'],
+            'en_cours' => ['resolu', 'rejete'],
+            'resolu' => [],
+            'rejete' => [],
+        ];
+
+        if (! in_array($nouveauStatut, $allowedTransitions[$ancienStatut] ?? [], true)) {
+            return back()->withErrors([
+                'statut' => 'Transition de statut invalide.',
+            ]);
         }
 
-        abort(403, 'You are not allowed to access this signalement.');
-    }
+        $signalement->update([
+            'statut' => $nouveauStatut,
+        ]);
 
-    private function authorizeCitizenOwner(int $userId, Signalement $signalement): void
-    {
-        abort_unless($signalement->citoyen_id === $userId, 403, 'You can only manage your own signalements.');
+        HistoriqueStatut::query()->create([
+            'titre' => 'Changement de statut',
+            'ancien_statut' => $ancienStatut,
+            'nouveau_statut' => $nouveauStatut,
+            'date_changement' => now()->toDateString(),
+            'signalement_id' => $signalement->id,
+        ]);
+
+        return redirect()->route('signalements.show', $signalement)->with('success', 'Statut mis a jour.');
     }
 }
