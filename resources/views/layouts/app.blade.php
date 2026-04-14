@@ -229,6 +229,7 @@
                 @auth
                     <a href="{{ route('dashboard') }}">Dashboard</a>
                     <a href="{{ route('signalements.index') }}">Signalements</a>
+                    <a href="{{ route('profile.show') }}">Profile</a>
                     <form method="POST" action="{{ route('logout') }}" class="inline-form">
                         @csrf
                         <button type="submit">Logout</button>

@@ -309,6 +309,25 @@
                                 {{ $signalement->agentMunicipal?->user?->name ?? 'Non assigné' }}
                             </div>
                         </div>
+
+                        @if ($canAssignAgent)
+                            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #f3f4f6;">
+                                <div class="info-label" style="margin-bottom: 10px;">Assigner un agent</div>
+                                <form method="POST" action="{{ route('signalements.assign.agent', $signalement) }}">
+                                    @csrf
+                                    <select name="agent_municipal_id" class="select-style">
+                                        <option value="">-- Non assigné --</option>
+                                        @foreach ($agents as $agent)
+                                            <option value="{{ $agent->id }}" @selected($signalement->agent_municipal_id === $agent->id)>
+                                                {{ $agent->user?->name ?? 'Agent #' . $agent->id }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <button type="submit" class="btn btn-primary" style="width: 100%;">Enregistrer
+                                        l'assignation</button>
+                                </form>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>

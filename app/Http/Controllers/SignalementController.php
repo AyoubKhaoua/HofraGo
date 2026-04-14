@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AgentMunicipal;
 use App\Models\Category;
 use App\Models\HistoriqueStatut;
 use App\Models\Photo;
 use App\Models\Signalement;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -48,6 +50,23 @@ class SignalementController extends Controller
         }
 
         $canUpdateStatus = in_array($user->role->name, ['admin', 'agent_municipal'], true);
+        $canAssignAgent = $user->role?->name === 'admin';
+
+        // Make sure each user with role agent_municipal has a matching agent_municipals row.
+        $agentUsers = User::query()
+            ->whereHas('role', function ($query) {
+                $query->where('name', 'agent_municipal');
+            })
+            ->get();
+
+        foreach ($agentUsers as $agentUser) {
+            AgentMunicipal::query()->firstOrCreate(
+                ['user_id' => $agentUser->id],
+                ['service' => 'Service general']
+            );
+        }
+
+        $agents = AgentMunicipal::query()->with('user')->orderBy('id')->get();
 
         $nextStatuses = [];
         if ($signalement->statut === 'en_attente') {
@@ -58,7 +77,14 @@ class SignalementController extends Controller
 
         $historiqueStatuts = $signalement->historiqueStatuts()->orderByDesc('id')->get();
 
-        return view('signalements.show', compact('signalement', 'canUpdateStatus', 'nextStatuses', 'historiqueStatuts'));
+        return view('signalements.show', compact(
+            'signalement',
+            'canUpdateStatus',
+            'canAssignAgent',
+            'agents',
+            'nextStatuses',
+            'historiqueStatuts'
+        ));
     }
 
     public function create(): View
@@ -198,5 +224,39 @@ class SignalementController extends Controller
         ]);
 
         return redirect()->route('signalements.show', $signalement)->with('success', 'Statut mis a jour.');
+    }
+
+    public function assignAgent(Request $request, Signalement $signalement): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->role?->name !== 'admin') {
+            abort(403, 'Access denied.');
+        }
+
+        $data = $request->validate([
+            'agent_municipal_id' => ['nullable', 'exists:agent_municipals,id'],
+        ]);
+
+        $oldAgentId = $signalement->agent_municipal_id;
+        $newAgentId = $data['agent_municipal_id'] ?? null;
+
+        if ($oldAgentId === $newAgentId) {
+            return back()->with('success', 'Aucun changement de l\'agent.');
+        }
+
+        $signalement->update([
+            'agent_municipal_id' => $newAgentId,
+        ]);
+
+        HistoriqueStatut::query()->create([
+            'titre' => 'Changement d\'assignation agent',
+            'ancien_statut' => $oldAgentId ? ('agent#' . $oldAgentId) : '-',
+            'nouveau_statut' => $newAgentId ? ('agent#' . $newAgentId) : 'non_assigne',
+            'date_changement' => now()->toDateString(),
+            'signalement_id' => $signalement->id,
+        ]);
+
+        return redirect()->route('signalements.show', $signalement)->with('success', 'Agent assigne avec succes.');
     }
 }

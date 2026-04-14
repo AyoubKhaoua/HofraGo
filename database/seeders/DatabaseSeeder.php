@@ -46,6 +46,12 @@ class DatabaseSeeder extends Seeder
             'role_id' => $agentRole->id,
         ]);
 
+        AgentMunicipal::query()->updateOrCreate([
+            'user_id' => $agentUser->id,
+        ], [
+            'service' => 'Service general',
+        ]);
+
 
 
         foreach (['Voirie', 'Eclairage', 'Proprete', 'Espaces verts'] as $title) {

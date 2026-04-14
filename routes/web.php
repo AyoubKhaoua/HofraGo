@@ -2,8 +2,8 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SignalementController;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -21,10 +21,18 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::middleware('role:admin,agent_municipal')->group(function (): void {
         Route::post('/signalements/{signalement}/status', [SignalementController::class, 'updateStatus'])
             ->name('signalements.status.update');
+    });
+
+    Route::middleware('role:admin')->group(function (): void {
+        Route::post('/signalements/{signalement}/assign-agent', [SignalementController::class, 'assignAgent'])
+            ->name('signalements.assign.agent');
     });
 
 
