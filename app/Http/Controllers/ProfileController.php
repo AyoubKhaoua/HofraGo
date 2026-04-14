@@ -44,4 +44,16 @@ class ProfileController extends Controller
 
         return redirect()->route('profile.show')->with('status', 'Profil mis a jour avec succes.');
     }
+    public function destroy(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        Auth::logout();
+        $user->delete();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('home')->with('status', 'Compte supprime avec succes.');
+    }
 }
