@@ -22,4 +22,26 @@ class ProfileController extends Controller
             'lastName' => $parts[1] ?? '',
         ]);
     }
+    public function update(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:60'],
+            'last_name' => ['nullable', 'string', 'max:60'],
+            'email' => ['required', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'localisation' => ['nullable', 'string', 'max:120'],
+            'biography' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $user->name = trim($validated['first_name'] . ' ' . ($validated['last_name'] ?? ''));
+        $user->email = $validated['email'];
+        $user->phone = $validated['phone'] ?: null;
+        $user->localisation = $validated['localisation'] ?: null;
+        $user->biography = $validated['biography'] ?: null;
+        $user->save();
+
+        return redirect()->route('profile.show')->with('status', 'Profil mis a jour avec succes.');
+    }
 }
